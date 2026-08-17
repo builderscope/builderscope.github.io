@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Builder Scope Publisher</title>
+<meta name="description" content="A self-publishing tool that uploads short-form videos to the operator's own social media accounts.">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 3rem 1.25rem 5rem;
+    font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1a1a1a; background: #fff;
+  }
+  main { max-width: 44rem; margin: 0 auto; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 .4rem; letter-spacing: -.02em; }
+  .tagline { color: #666; margin: 0 0 2.5rem; font-size: 1.05rem; }
+  h2 { font-size: 1.15rem; margin: 2.5rem 0 .75rem; letter-spacing: -.01em; }
+  p, li { color: #333; }
+  ul { padding-left: 1.25rem; }
+  li { margin: .35rem 0; }
+  .box { border: 1px solid #e3e3e3; border-radius: 10px; padding: 1.1rem 1.3rem; margin: 1.25rem 0; background: #fafafa; }
+  .box p:first-child { margin-top: 0; }
+  .box p:last-child { margin-bottom: 0; }
+  footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid #e3e3e3; font-size: .9rem; color: #666; }
+  footer a { color: #333; }
+  a { color: #0b5fff; }
+  code { background: #f0f0f0; padding: .1rem .35rem; border-radius: 4px; font-size: .9em; }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e8e8e8; background: #141414; }
+    p, li { color: #cfcfcf; }
+    .tagline, footer { color: #9a9a9a; }
+    .box { background: #1c1c1c; border-color: #2e2e2e; }
+    footer { border-color: #2e2e2e; }
+    footer a { color: #cfcfcf; }
+    a { color: #79a9ff; }
+    code { background: #262626; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Builder Scope Publisher</h1>
+  <p class="tagline">A private publishing tool for uploading short-form videos to our own social media accounts.</p>
+
+  <h2>What this tool does</h2>
+  <p>
+    Builder Scope Publisher is an internal tool operated by a single individual. It takes short-form
+    videos that we produce ourselves and uploads them to social media accounts that we own and control,
+    so that publishing does not have to be done by hand on each platform.
+  </p>
+  <p>The workflow is straightforward:</p>
+  <ul>
+    <li>A video is edited and rendered on the operator's own computer.</li>
+    <li>The operator signs in to a platform account that they own, using that platform's official OAuth flow.</li>
+    <li>The tool uploads the finished video file to that same account.</li>
+  </ul>
+
+  <h2>Who can use it</h2>
+  <div class="box">
+    <p>
+      <strong>This is not a public service.</strong> There is no sign-up, no user accounts, and no way for
+      anyone else to connect their social media account to it. It authorizes only the accounts belonging
+      to its operator, and it is used only to publish that operator's own content.
+    </p>
+  </div>
+
+  <h2>Platforms</h2>
+  <p>
+    The tool integrates with the official publishing APIs of the platforms we post to, including
+    TikTok, Instagram, and YouTube. It requests only the permissions needed to upload a video to the
+    connected account &mdash; nothing else.
+  </p>
+
+  <h2>Data</h2>
+  <p>
+    The tool does not collect personal data from anyone. It does not gather data about viewers, it does
+    not track visitors to this website, and it uses no cookies or analytics. The only credentials it
+    stores are the access tokens for the operator's own accounts, kept locally on the operator's
+    computer. Details are in the <a href="privacy.html">Privacy Policy</a>.
+  </p>
+
+  <h2>Removing content and revoking access</h2>
+  <p>
+    Any video published by this tool can be deleted directly from the account it was posted to, using
+    the platform's own interface, at any time. Access can be withdrawn at any time by revoking the
+    tool's authorization in the platform's account settings, which immediately stops it from publishing
+    anything further. Stored tokens are deleted on request &mdash; see the
+    <a href="privacy.html">Privacy Policy</a> for how.
+  </p>
+
+  <h2>Contact</h2>
+  <p>Questions about this tool can be sent to <a href="mailto:repaid.good2@gmail.com">repaid.good2@gmail.com</a>.</p>
+
+  <footer>
+    <p>
+      <a href="terms.html">Terms of Service</a> &nbsp;&middot;&nbsp;
+      <a href="privacy.html">Privacy Policy</a>
+    </p>
+    <p>Last updated: August 18, 2026</p>
+  </footer>
+</main>
+</body>
+</html>
