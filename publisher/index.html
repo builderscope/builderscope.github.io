@@ -25,6 +25,7 @@
   .creator img { width:40px; height:40px; border-radius:50%; background:var(--line); }
   .creator .name { font-weight:600; }
   .creator .handle { color:var(--muted); font-size:13px; }
+  #connect { margin-left:auto; }
 
   .field { margin-bottom:18px; }
   .field > label.top { display:block; font-weight:600; margin-bottom:6px; }
@@ -145,6 +146,9 @@
           <div class="name" id="nick">loading…</div>
           <div class="handle" id="handle"></div>
         </div>
+        <!-- The consent round trip starts here rather than in a local script, so the address bar in
+             the review recording stays on this domain for every frame except TikTok's own screen. -->
+        <button class="filebtn" id="connect">Connect TikTok account</button>
       </div>
 
       <div class="field">
@@ -467,6 +471,28 @@ $('post').addEventListener('click', async () => {
   busy = false; render()
 })
 
+// The Worker mints the consent URL: the PKCE verifier has to stay server-side, and the client key
+// belongs next to the secret it pairs with. This page only carries the operator there and back.
+$('connect').addEventListener('click', async () => {
+  const b = $('connect')
+  b.disabled = true
+  b.textContent = 'Opening TikTok…'
+  try {
+    const res = await fetch(API_BASE + '/api/auth/start', { headers: authHeaders() })
+    const d = await res.json()
+    if (!res.ok || !d.url) throw new Error(d.detail || d.error || 'HTTP ' + res.status)
+    // Same tab, deliberately. A popup would put the consent screen in a window the single-window
+    // screen recording never sees, and sessionStorage -- where the passphrase is -- survives a
+    // same-tab round trip out to TikTok and back.
+    location.href = d.url
+  } catch (e) {
+    b.disabled = false
+    b.textContent = 'Connect TikTok account'
+    $('nick').textContent = 'Could not start the consent flow'
+    $('handle').textContent = e.message
+  }
+})
+
 function unlocked() {
   $('lock').classList.add('hidden')
   $('app').classList.remove('hidden')
@@ -488,17 +514,18 @@ $('unlock').addEventListener('click', async () => {
     $('lockMsg').textContent = 'Could not reach the API: ' + e.message
     return
   }
-  if (r.ok) {
-    sessionStorage.setItem(PASS_KEY, v)
-    $('pass').value = ''
-    $('lockMsg').textContent = ''
-    unlocked()
+  if (r.status === 401) {
+    $('lockMsg').className = 'msg bad'
+    $('lockMsg').textContent = 'Refused. Check the passphrase and try again.'
     return
   }
-  $('lockMsg').className = 'msg bad'
-  $('lockMsg').textContent = r.status === 401
-    ? 'Refused. Check the passphrase and try again.'
-    : `Passphrase accepted, but the API answered ${r.status}${r.detail ? ': ' + r.detail : '.'}`
+  // Accepted by the gate, whatever creator_info then said. Unlock either way: a token that has
+  // expired or been revoked is exactly the case that needs the Connect button, and that button
+  // lives behind this gate. The creator row already carries what went wrong.
+  sessionStorage.setItem(PASS_KEY, v)
+  $('pass').value = ''
+  $('lockMsg').textContent = ''
+  unlocked()
 })
 
 $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('unlock').click() })
@@ -506,7 +533,14 @@ $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('unlock').
 async function boot() {
   // The local server is reachable from this machine only, so it needs no passphrase and showing an
   // empty gate there would be theatre.
-  if (LOCAL) { $('app').classList.remove('hidden'); try { await loadCreator() } catch {} return }
+  // The consent flow can only return to the hosted redirect URI, so the button is not merely
+  // useless against the local server -- it would strand the operator on a page that is not there.
+  if (LOCAL) {
+    $('connect').classList.add('hidden')
+    $('app').classList.remove('hidden')
+    try { await loadCreator() } catch {}
+    return
+  }
   $('lock').classList.remove('hidden')
   const stored = pass()
   if (!stored) return
@@ -515,8 +549,8 @@ async function boot() {
   // this path on every reload and the gate looks broken rather than locked.
   let r
   try { r = await loadCreator(stored) } catch { sessionStorage.removeItem(PASS_KEY); return }
-  if (r.ok) { unlocked(); return }
-  if (r.status === 401) sessionStorage.removeItem(PASS_KEY)
+  if (r.status === 401) { sessionStorage.removeItem(PASS_KEY); return }
+  unlocked()
 }
 
 boot()
