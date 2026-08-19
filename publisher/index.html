@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- The page is English by design; without this Chrome offers to translate it and the popup lands in review recordings. -->
+<meta name="google" content="notranslate">
+<!-- Window title is also the capture handle: ffmpeg -f gdigrab -i title=Builder Scope Publisher ... -->
+<title>Builder Scope Publisher</title>
+<style>
+  :root { --ink:#161823; --muted:#67686f; --line:#e3e3e5; --accent:#fe2c55; --bg:#f8f8f8; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px; background:var(--bg); color:var(--ink);
+         font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 20px; }
+  .cols { display:flex; gap:24px; align-items:flex-start; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; }
+  .form { flex:1 1 auto; }
+  .side { flex:0 0 268px; }
+
+  /* [1] creator */
+  .creator { display:flex; align-items:center; gap:10px; padding-bottom:16px;
+             border-bottom:1px solid var(--line); margin-bottom:18px; }
+  .creator img { width:40px; height:40px; border-radius:50%; background:var(--line); }
+  .creator .name { font-weight:600; }
+  .creator .handle { color:var(--muted); font-size:13px; }
+
+  .field { margin-bottom:18px; }
+  .field > label.top { display:block; font-weight:600; margin-bottom:6px; }
+  input[type=text] { width:100%; padding:9px 10px; border:1px solid var(--line);
+            border-radius:8px; background:#fff; font:inherit; color:inherit; }
+
+  /* Own dropdown, not <select>: a native popup is a separate OS window, so a single-window screen
+     recording would not show the option list at all -- and a disabled <option> drops out of the
+     accessibility tree instead of staying visibly greyed out. Both matter for review. */
+  .select { position:relative; }
+  .selbtn { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px;
+            padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:#fff;
+            font:inherit; color:inherit; text-align:left; cursor:pointer; }
+  .selbtn.empty { color:var(--muted); }
+  .selbtn .caret { color:var(--muted); font-size:11px; }
+  .options { position:absolute; z-index:10; left:0; right:0; top:calc(100% + 4px); margin:0; padding:4px;
+             list-style:none; background:#fff; border:1px solid var(--line); border-radius:8px;
+             box-shadow:0 6px 20px rgba(0,0,0,.10); }
+  .opt { padding:8px 10px; border-radius:6px; cursor:pointer; }
+  .opt:hover { background:#f4f4f6; }
+  .opt[aria-selected="true"]::after { content:"✓"; float:right; color:var(--accent); }
+  .opt.off, .opt.off:hover { color:#b4b5ba; cursor:not-allowed; background:none; }
+  .opt.off .why { font-size:12px; display:block; }
+  /* The native file button renders in the browser's UI language; a own label keeps the page English. */
+  .filepick { display:flex; align-items:center; gap:12px; }
+  .filebtn { padding:9px 14px; border:1px solid var(--line); border-radius:8px; background:#fff;
+             cursor:pointer; font-weight:500; white-space:nowrap; }
+  .filebtn:hover { background:#f4f4f6; }
+  #fileName { color:var(--muted); font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hint { font-size:12.5px; color:var(--muted); margin-top:6px; }
+  .warn { font-size:12.5px; color:var(--accent); margin-top:6px; }
+  .count { font-size:12px; color:var(--muted); text-align:right; margin-top:4px; }
+
+  /* [3] interaction checkboxes */
+  .checks { display:flex; flex-direction:column; gap:9px; }
+  .check { display:flex; align-items:center; gap:9px; }
+  .check.off { color:#b4b5ba; }           /* "disable and grey out" */
+  .check.off .why { font-size:12px; }
+  .check input { width:16px; height:16px; accent-color:var(--accent); }
+
+  /* [4] commercial toggle */
+  .row { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+  .switch { position:relative; flex:0 0 44px; width:44px; height:24px; }
+  .switch input { opacity:0; width:0; height:0; position:absolute; }
+  .track { position:absolute; inset:0; background:#d5d5d8; border-radius:24px; cursor:pointer;
+           transition:background .15s; }
+  .track::after { content:""; position:absolute; top:2px; left:2px; width:20px; height:20px;
+           background:#fff; border-radius:50%; transition:transform .15s; }
+  .switch input:checked + .track { background:var(--accent); }
+  .switch input:checked + .track::after { transform:translateX(20px); }
+  .switch input:focus-visible + .track { outline:2px solid var(--ink); outline-offset:2px; }
+
+  #brandBox { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .brandopt { margin-bottom:12px; }
+  .brandopt .desc { font-size:12.5px; color:var(--muted); margin:2px 0 0 25px; }
+
+  /* [6] declaration */
+  .decl { font-size:12.5px; color:var(--muted); border-top:1px solid var(--line);
+          padding-top:14px; margin-top:4px; }
+  .decl a { color:var(--ink); }
+
+  .postbtn { width:100%; padding:11px; border:0; border-radius:8px; background:var(--accent);
+             color:#fff; font:600 15px/1 inherit; cursor:pointer; }
+  .postbtn:disabled { background:#f1f1f2; color:#c0c0c5; cursor:not-allowed; }
+
+  /* The passphrase gate. The page is public, so it holds no secret of its own -- this is typed in
+     and forwarded to the Worker, which is the only side that knows the answer. */
+  .lock { margin-bottom:20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .lock label { font-weight:600; }
+  .lock input { padding:9px 10px; border:1px solid var(--line); border-radius:8px;
+                background:#fff; font:inherit; color:inherit; min-width:240px; }
+  .lock button { padding:9px 16px; border:0; border-radius:8px; background:var(--ink);
+                 color:#fff; font:600 15px/1 inherit; cursor:pointer; }
+  .lock .msg { font-size:13px; color:var(--muted); }
+  .lock .msg.bad { color:var(--accent); }
+  .hidden { display:none; }
+
+  /* [8] preview */
+  .frame { width:228px; aspect-ratio:9/16; background:#000; border-radius:10px; overflow:hidden;
+           display:flex; align-items:center; justify-content:center; }
+  .frame video { width:100%; height:100%; object-fit:contain; }
+  .frame .empty { color:#6a6a70; font-size:12.5px; text-align:center; padding:0 16px; }
+  .side h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+             margin:0 0 12px; }
+  .recap { list-style:none; padding:0; margin:14px 0 0; font-size:12.5px; color:var(--muted); }
+  .recap li { display:flex; justify-content:space-between; gap:10px; padding:3px 0; }
+  .recap b { color:var(--ink); font-weight:500; text-align:right; }
+  .cap { margin-top:12px; font-size:12.5px; white-space:pre-wrap; word-break:break-word; }
+
+  #result { margin-top:16px; font-size:13.5px; padding:12px 14px; border-radius:8px; display:none; }
+  #result.ok { display:block; background:#eef8f0; border:1px solid #bfe3c8; }
+  #result.bad { display:block; background:#fdeef1; border:1px solid #f6c2ce; }
+  #result.work { display:block; background:#f2f2f4; border:1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Builder Scope Publisher</h1>
+  <p class="sub">Posts a clip to TikTok with the Content Posting API (Direct Post).</p>
+
+  <!-- Served from a public origin, so the page cannot carry a credential of its own. The operator
+       types this once; it rides on every API call and the Worker checks it against a secret only
+       the Worker holds. Hidden entirely when running against the local server, which is already
+       reachable from this machine only. -->
+  <div class="card lock hidden" id="lock">
+    <label for="pass">Operator passphrase</label>
+    <input type="password" id="pass" autocomplete="current-password">
+    <button id="unlock">Unlock</button>
+    <span class="msg" id="lockMsg"></span>
+  </div>
+
+  <div class="cols hidden" id="app">
+    <div class="card form">
+      <!-- [1] creator nickname -->
+      <div class="creator">
+        <img id="avatar" alt="">
+        <div>
+          <div class="name" id="nick">loading…</div>
+          <div class="handle" id="handle"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="top" for="file">Video</label>
+        <div class="filepick">
+          <input type="file" id="file" accept="video/mp4,video/quicktime,video/webm" hidden>
+          <label class="filebtn" for="file">Choose video</label>
+          <span id="fileName">No file chosen</span>
+        </div>
+        <div class="hint" id="fileHint">MP4, MOV or WebM. Max length <span id="maxdur">—</span>.</div>
+      </div>
+
+      <div class="field">
+        <label class="top" for="title">Caption</label>
+        <input type="text" id="title" maxlength="2200" placeholder="Say something about this clip">
+        <div class="count"><span id="titleCount">0</span> / 2200</div>
+      </div>
+
+      <!-- [2] privacy dropdown: options come from creator_info, and there is no default value -->
+      <div class="field">
+        <span class="top" style="display:block;font-weight:600;margin-bottom:6px;">Who can view this video</span>
+        <div class="select">
+          <button type="button" class="selbtn empty" id="privacyBtn" aria-haspopup="listbox" aria-expanded="false">
+            <span id="privacyLabel">Select who can view this video</span><span class="caret">▼</span>
+          </button>
+          <ul class="options" id="privacyList" role="listbox" aria-label="Who can view this video" hidden></ul>
+        </div>
+        <div class="warn" id="privacyWarn" hidden>Branded content visibility cannot be set to private.</div>
+      </div>
+
+      <!-- [3] interaction toggles: unchecked by default, greyed out when the creator disallows them -->
+      <div class="field">
+        <span class="top" style="display:block;font-weight:600;margin-bottom:6px;">Allow users to</span>
+        <div class="checks">
+          <label class="check" id="wrapComment"><input type="checkbox" id="allowComment"><span>Comment</span><span class="why"></span></label>
+          <label class="check" id="wrapDuet"><input type="checkbox" id="allowDuet"><span>Duet</span><span class="why"></span></label>
+          <label class="check" id="wrapStitch"><input type="checkbox" id="allowStitch"><span>Stitch</span><span class="why"></span></label>
+        </div>
+      </div>
+
+      <!-- [4] commercial content disclosure: off by default -->
+      <div class="field">
+        <div class="row">
+          <div>
+            <span style="font-weight:600;">Disclose video content</span>
+            <div class="hint">Turn on to disclose that this video promotes goods or services in exchange
+              for something of value. Your video could promote yourself, a third party, or both.</div>
+          </div>
+          <span class="switch">
+            <input type="checkbox" id="commercial"><span class="track"></span>
+          </span>
+        </div>
+
+        <!-- [5] at least one of the two must be picked once the toggle is on -->
+        <div id="brandBox" hidden>
+          <label class="brandopt check"><input type="checkbox" id="yourBrand"><span>Your brand</span></label>
+          <div class="desc">You are promoting yourself or your own business. This video will be classified as Brand Organic.</div>
+          <label class="brandopt check" style="margin-top:12px;"><input type="checkbox" id="brandedContent"><span>Branded content</span></label>
+          <div class="desc">You are promoting another brand or a third party. This video will be classified as Branded Content.</div>
+        </div>
+      </div>
+
+      <!-- [6] declaration text changes with the selection above -->
+      <p class="decl" id="decl"></p>
+
+      <span id="postWrap"><button class="postbtn" id="post" disabled>Post</button></span>
+      <div id="result"></div>
+    </div>
+
+    <!-- [8] preview of the content to be posted -->
+    <div class="card side">
+      <h2>Preview</h2>
+      <div class="frame" id="frame"><span class="empty">Choose a video to see it here</span></div>
+      <div class="cap" id="capPreview"></div>
+      <ul class="recap">
+        <li><span>Visibility</span><b id="rcPrivacy">—</b></li>
+        <li><span>Comment</span><b id="rcComment">—</b></li>
+        <li><span>Duet</span><b id="rcDuet">—</b></li>
+        <li><span>Stitch</span><b id="rcStitch">—</b></li>
+        <li><span>Disclosure</span><b id="rcBrand">—</b></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id)
+const LABEL = {
+  PUBLIC_TO_EVERYONE: 'Everyone',
+  FOLLOWER_OF_CREATOR: 'Followers',
+  MUTUAL_FOLLOW_FRIENDS: 'Friends',
+  SELF_ONLY: 'Only me',
+}
+const MUSIC = 'https://www.tiktok.com/legal/page/global/music-usage-confirmation/en'
+const BC = 'https://www.tiktok.com/legal/page/global/bc-policy/en'
+
+// The page and the API sit on different origins now. GitHub Pages serves this file so the address
+// bar in the review video matches the website URL on the app form, while the token stays on the
+// Worker. Same-origin is kept for the local server.mjs so one file serves both homes and there is
+// no second copy to drift.
+const LOCAL = location.hostname === '127.0.0.1' || location.hostname === 'localhost'
+const API_BASE = LOCAL ? '' : 'https://bs-publisher.repaid-good2.workers.dev'
+// sessionStorage, not localStorage: it dies with the tab, so the passphrase does not outlive the
+// window on a machine that also gets screen-recorded.
+const PASS_KEY = 'bs-pass'
+const pass = () => sessionStorage.getItem(PASS_KEY) || ''
+const authHeaders = () => (LOCAL ? {} : { 'x-bs-auth': pass() })
+
+let info = null
+let file = null
+let busy = false
+let privacyValue = ''   // no default value: the creator has to pick one
+let previewUrl = null
+let posted = false      // the API has no delete endpoint, so a second click cannot be taken back
+
+// btoa() rejects anything above U+00FF, and a caption is user text. Encode to UTF-8 bytes first.
+function b64utf8(s) {
+  let bin = ''
+  for (const b of new TextEncoder().encode(s)) bin += String.fromCharCode(b)
+  return btoa(bin)
+}
+
+// The privacy list, the greyed-out interactions and the duration cap are all the creator's, not ours.
+// Hard-coding any of them is how a UI passes review and then lies to a different account.
+async function loadCreator() {
+  const res = await fetch(API_BASE + '/api/creator-info', { headers: authHeaders() })
+  const d = await res.json()
+  // The verdict goes back to the caller too: boot() needs to tell "the passphrase was refused"
+  // apart from "TikTok is unhappy", and only the first one should send the operator back to the gate.
+  if (!res.ok) {
+    $('nick').textContent = 'Could not load creator info'
+    $('handle').textContent = d.detail || d.error || ''
+    return false
+  }
+  info = d
+  $('avatar').src = d.creator_avatar_url
+  $('nick').textContent = d.creator_nickname
+  $('handle').textContent = '@' + d.creator_username
+  $('maxdur').textContent = Math.floor(d.max_video_post_duration_sec / 60) + ' min'
+
+  lockInteraction('Comment', d.comment_disabled, 'wrapComment', 'allowComment')
+  lockInteraction('Duet', d.duet_disabled, 'wrapDuet', 'allowDuet')
+  lockInteraction('Stitch', d.stitch_disabled, 'wrapStitch', 'allowStitch')
+  render()
+  return true
+}
+
+function lockInteraction(name, disabled, wrapId, inputId) {
+  if (!disabled) return
+  const w = $(wrapId)
+  w.classList.add('off')
+  $(inputId).checked = false
+  $(inputId).disabled = true
+  w.querySelector('.why').textContent = '— turned off in your TikTok settings'
+}
+
+// [2] The option list is the creator's, so it is built from creator_info every time it opens.
+// [7] Branded content cannot be private: SELF_ONLY is greyed out and refuses the click.
+function renderPrivacyList() {
+  if (!info) return
+  const branded = $('brandedContent').checked && $('commercial').checked
+  const ul = $('privacyList')
+  ul.innerHTML = ''
+  for (const opt of info.privacy_level_options) {
+    const blocked = branded && opt === 'SELF_ONLY'
+    const li = document.createElement('li')
+    li.className = 'opt' + (blocked ? ' off' : '')
+    li.setAttribute('role', 'option')
+    li.setAttribute('aria-selected', String(privacyValue === opt))
+    if (blocked) li.setAttribute('aria-disabled', 'true')
+    li.textContent = LABEL[opt] || opt
+    if (blocked) {
+      const why = document.createElement('span')
+      why.className = 'why'
+      why.textContent = 'Not available for branded content'
+      li.append(why)
+    }
+    li.addEventListener('click', () => {
+      if (blocked) return
+      privacyValue = opt
+      closeList()
+      render()
+    })
+    ul.append(li)
+  }
+}
+
+function openList() { renderPrivacyList(); $('privacyList').hidden = false; $('privacyBtn').setAttribute('aria-expanded', 'true') }
+function closeList() { $('privacyList').hidden = true; $('privacyBtn').setAttribute('aria-expanded', 'false') }
+
+function applyBrandedPrivacyRule() {
+  const branded = $('brandedContent').checked && $('commercial').checked
+  if (branded && privacyValue === 'SELF_ONLY') privacyValue = ''   // back to "no default value"
+  $('privacyWarn').hidden = !branded
+  if (!$('privacyList').hidden) renderPrivacyList()
+}
+
+function declaration() {
+  const on = $('commercial').checked
+  const bc = on && $('brandedContent').checked
+  if (bc) {
+    return `By posting, you agree to TikTok's <a href="${BC}" target="_blank" rel="noopener">Branded Content Policy</a>`
+         + ` and <a href="${MUSIC}" target="_blank" rel="noopener">Music Usage Confirmation</a>.`
+  }
+  return `By posting, you agree to TikTok's <a href="${MUSIC}" target="_blank" rel="noopener">Music Usage Confirmation</a>.`
+}
+
+function render() {
+  const on = $('commercial').checked
+  $('brandBox').hidden = !on
+  if (!on) { $('yourBrand').checked = false; $('brandedContent').checked = false }
+  applyBrandedPrivacyRule()
+  $('decl').innerHTML = declaration()
+
+  const privacy = privacyValue
+  $('privacyLabel').textContent = privacy ? LABEL[privacy] : 'Select who can view this video'
+  $('privacyBtn').classList.toggle('empty', !privacy)
+
+  const noBrandPicked = on && !$('yourBrand').checked && !$('brandedContent').checked
+  const ready = !!file && !!privacy && !noBrandPicked && !busy && !posted
+
+  $('post').disabled = !ready
+  // A disabled button swallows its own tooltip, so the hover message lives on the wrapper.
+  $('postWrap').title = noBrandPicked
+    ? 'You need to indicate if your content promotes yourself, a third party, or both'
+    : !file ? 'Choose a video first'
+    : !privacy ? 'Choose who can view this video'
+    : posted ? 'Already posted. Choose another video to post again.'
+    : ''
+
+  $('rcPrivacy').textContent = privacy ? LABEL[privacy] : 'not selected'
+  for (const [k, id] of [['allowComment','rcComment'], ['allowDuet','rcDuet'], ['allowStitch','rcStitch']]) {
+    $(id).textContent = $(k).disabled ? 'off (creator)' : $(k).checked ? 'on' : 'off'
+  }
+  $('rcBrand').textContent = !on ? 'none'
+    : [$('yourBrand').checked && 'Your brand', $('brandedContent').checked && 'Branded content']
+        .filter(Boolean).join(' + ') || 'not selected'
+  $('capPreview').textContent = $('title').value
+}
+
+$('file').addEventListener('change', e => {
+  file = e.target.files[0] || null
+  posted = false
+  $('result').className = ''
+  $('fileName').textContent = file ? file.name : 'No file chosen'
+  const frame = $('frame')
+  frame.innerHTML = ''
+  if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null }   // else each re-pick pins a whole video
+  if (file) {
+    const v = document.createElement('video')
+    previewUrl = URL.createObjectURL(file)
+    v.src = previewUrl
+    v.controls = true; v.muted = true; v.playsInline = true
+    frame.append(v)
+  } else {
+    frame.innerHTML = '<span class="empty">Choose a video to see it here</span>'
+  }
+  render()
+})
+$('title').addEventListener('input', () => { $('titleCount').textContent = $('title').value.length; render() })
+for (const id of ['allowComment','allowDuet','allowStitch','commercial','yourBrand','brandedContent']) {
+  $(id).addEventListener('change', render)
+}
+$('privacyBtn').addEventListener('click', () => $('privacyList').hidden ? openList() : closeList())
+document.addEventListener('click', e => { if (!e.target.closest('.select')) closeList() })
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeList() })
+
+$('post').addEventListener('click', async () => {
+  busy = true; render()
+  const r = $('result')
+  r.className = 'work'
+  r.textContent = 'Uploading and publishing… this takes a few seconds.'
+
+  // Checked means "allow", the API field means "disable" -- invert here, once.
+  const meta = {
+    privacy_level: privacyValue,
+    title: $('title').value,
+    disable_comment: !$('allowComment').checked,
+    disable_duet: !$('allowDuet').checked,
+    disable_stitch: !$('allowStitch').checked,
+    brand_organic_toggle: $('commercial').checked && $('yourBrand').checked,
+    brand_content_toggle: $('commercial').checked && $('brandedContent').checked,
+  }
+  try {
+    const res = await fetch(API_BASE + '/api/publish', {
+      method: 'POST',
+      headers: {
+        'Content-Type': file.type || 'video/mp4',
+        'x-post-info': b64utf8(JSON.stringify(meta)),
+        ...authHeaders(),
+      },
+      body: file,
+    })
+    const d = await res.json()
+    if (d.status === 'PUBLISH_COMPLETE') {
+      r.className = 'ok'
+      r.textContent = `Posted. TikTok confirmed PUBLISH_COMPLETE after ${d.seconds}s.`
+      posted = true
+    } else {
+      r.className = 'bad'
+      // Never blame TikTok for a limit of ours -- a review video would carry that claim.
+      r.textContent = `${d.where === 'local' ? 'This app could not send it' : 'TikTok refused it'}: `
+                    + `${d.error}${d.detail ? ' — ' + d.detail : ''}`
+    }
+  } catch (e) {
+    r.className = 'bad'
+    r.textContent = 'Request failed: ' + e.message
+  }
+  busy = false; render()
+})
+
+function unlocked() {
+  $('lock').classList.add('hidden')
+  $('app').classList.remove('hidden')
+}
+
+$('unlock').addEventListener('click', async () => {
+  const v = $('pass').value
+  if (!v) return
+  sessionStorage.setItem(PASS_KEY, v)
+  $('lockMsg').className = 'msg'
+  $('lockMsg').textContent = 'Checking...'
+  if (await loadCreator()) { $('pass').value = ''; $('lockMsg').textContent = ''; unlocked(); return }
+  // Do not keep a passphrase that was just refused: it would be retried silently on the next load
+  // and the gate would look broken rather than locked.
+  sessionStorage.removeItem(PASS_KEY)
+  $('lockMsg').className = 'msg bad'
+  $('lockMsg').textContent = 'Refused. Check the passphrase and try again.'
+})
+
+$('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('unlock').click() })
+
+async function boot() {
+  // The local server is reachable from this machine only, so it needs no passphrase and showing an
+  // empty gate there would be theatre.
+  if (LOCAL) { $('app').classList.remove('hidden'); await loadCreator(); return }
+  $('lock').classList.remove('hidden')
+  // Reuse a passphrase already accepted in this tab so a reload mid-recording does not force a
+  // retype -- but a stale one falls back to the gate instead of leaving a blank page.
+  if (pass() && await loadCreator()) { unlocked(); return }
+  sessionStorage.removeItem(PASS_KEY)
+}
+
+boot()
+</script>
+</body>
+</html>
