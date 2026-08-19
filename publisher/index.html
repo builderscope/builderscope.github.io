@@ -272,12 +272,13 @@ function b64utf8(s) {
 async function loadCreator() {
   const res = await fetch(API_BASE + '/api/creator-info', { headers: authHeaders() })
   const d = await res.json()
-  // The verdict goes back to the caller too: boot() needs to tell "the passphrase was refused"
-  // apart from "TikTok is unhappy", and only the first one should send the operator back to the gate.
+  // The status goes back to the caller: only a 401 means the passphrase was wrong. Reporting a
+  // TikTok failure as "wrong passphrase" would send the operator to fix the one thing that is
+  // already right -- and on camera it would blame the wrong side.
   if (!res.ok) {
     $('nick').textContent = 'Could not load creator info'
     $('handle').textContent = d.detail || d.error || ''
-    return false
+    return { ok: false, status: res.status, detail: d.detail || d.error || '' }
   }
   info = d
   $('avatar').src = d.creator_avatar_url
@@ -289,7 +290,7 @@ async function loadCreator() {
   lockInteraction('Duet', d.duet_disabled, 'wrapDuet', 'allowDuet')
   lockInteraction('Stitch', d.stitch_disabled, 'wrapStitch', 'allowStitch')
   render()
-  return true
+  return { ok: true }
 }
 
 function lockInteraction(name, disabled, wrapId, inputId) {
@@ -467,12 +468,19 @@ $('unlock').addEventListener('click', async () => {
   sessionStorage.setItem(PASS_KEY, v)
   $('lockMsg').className = 'msg'
   $('lockMsg').textContent = 'Checking...'
-  if (await loadCreator()) { $('pass').value = ''; $('lockMsg').textContent = ''; unlocked(); return }
-  // Do not keep a passphrase that was just refused: it would be retried silently on the next load
-  // and the gate would look broken rather than locked.
-  sessionStorage.removeItem(PASS_KEY)
+  const r = await loadCreator()
+  if (r.ok) { $('pass').value = ''; $('lockMsg').textContent = ''; unlocked(); return }
   $('lockMsg').className = 'msg bad'
-  $('lockMsg').textContent = 'Refused. Check the passphrase and try again.'
+  if (r.status === 401) {
+    // Do not keep a passphrase that was just refused: it would be retried silently on the next
+    // load and the gate would look broken rather than locked.
+    sessionStorage.removeItem(PASS_KEY)
+    $('lockMsg').textContent = 'Refused. Check the passphrase and try again.'
+  } else {
+    // The passphrase got through -- this failure is downstream, so keep it and say where it was.
+    $('lockMsg').textContent = `Passphrase accepted, but the API answered ${r.status}`
+                             + `${r.detail ? ': ' + r.detail : '.'}`
+  }
 })
 
 $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('unlock').click() })
@@ -482,10 +490,14 @@ async function boot() {
   // empty gate there would be theatre.
   if (LOCAL) { $('app').classList.remove('hidden'); await loadCreator(); return }
   $('lock').classList.remove('hidden')
+  if (!pass()) return
   // Reuse a passphrase already accepted in this tab so a reload mid-recording does not force a
   // retype -- but a stale one falls back to the gate instead of leaving a blank page.
-  if (pass() && await loadCreator()) { unlocked(); return }
-  sessionStorage.removeItem(PASS_KEY)
+  const r = await loadCreator()
+  if (r.ok) { unlocked(); return }
+  // Only a rejected passphrase is discarded. Dropping it on a downstream error would turn one
+  // TikTok hiccup into a retype, mid-recording.
+  if (r.status === 401) sessionStorage.removeItem(PASS_KEY)
 }
 
 boot()
