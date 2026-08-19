@@ -251,7 +251,7 @@ const API_BASE = LOCAL ? '' : 'https://bs-publisher.repaid-good2.workers.dev'
 // window on a machine that also gets screen-recorded.
 const PASS_KEY = 'bs-pass'
 const pass = () => sessionStorage.getItem(PASS_KEY) || ''
-const authHeaders = () => (LOCAL ? {} : { 'x-bs-auth': pass() })
+const authHeaders = (pw) => (LOCAL ? {} : { 'x-bs-auth': pw !== undefined ? pw : pass() })
 
 let info = null
 let file = null
@@ -269,8 +269,8 @@ function b64utf8(s) {
 
 // The privacy list, the greyed-out interactions and the duration cap are all the creator's, not ours.
 // Hard-coding any of them is how a UI passes review and then lies to a different account.
-async function loadCreator() {
-  const res = await fetch(API_BASE + '/api/creator-info', { headers: authHeaders() })
+async function loadCreator(pw) {
+  const res = await fetch(API_BASE + '/api/creator-info', { headers: authHeaders(pw) })
   const d = await res.json()
   // The status goes back to the caller: only a 401 means the passphrase was wrong. Reporting a
   // TikTok failure as "wrong passphrase" would send the operator to fix the one thing that is
@@ -444,6 +444,16 @@ $('post').addEventListener('click', async () => {
       r.className = 'ok'
       r.textContent = `Posted. TikTok confirmed PUBLISH_COMPLETE after ${d.seconds}s.`
       posted = true
+    } else if (d.error === 'timeout') {
+      // A timeout is neither a refusal nor a failure: TikTok took the upload and is still working
+      // on it. Calling it "refused" is a false claim, and re-enabling Post would invite a second
+      // click on something that may already be live -- and there is no delete endpoint. So this is
+      // terminal and unknown, not retryable.
+      r.className = 'bad'
+      r.textContent = 'Still processing. TikTok accepted the upload'
+                    + `${d.publish_id ? ` (publish id ${d.publish_id})` : ''} but did not confirm in time. `
+                    + 'Check the TikTok app before posting this clip again.'
+      posted = true
     } else {
       r.className = 'bad'
       // Never blame TikTok for a limit of ours -- a review video would carry that claim.
@@ -465,22 +475,30 @@ function unlocked() {
 $('unlock').addEventListener('click', async () => {
   const v = $('pass').value
   if (!v) return
-  sessionStorage.setItem(PASS_KEY, v)
   $('lockMsg').className = 'msg'
   $('lockMsg').textContent = 'Checking...'
-  const r = await loadCreator()
-  if (r.ok) { $('pass').value = ''; $('lockMsg').textContent = ''; unlocked(); return }
-  $('lockMsg').className = 'msg bad'
-  if (r.status === 401) {
-    // Do not keep a passphrase that was just refused: it would be retried silently on the next
-    // load and the gate would look broken rather than locked.
-    sessionStorage.removeItem(PASS_KEY)
-    $('lockMsg').textContent = 'Refused. Check the passphrase and try again.'
-  } else {
-    // The passphrase got through -- this failure is downstream, so keep it and say where it was.
-    $('lockMsg').textContent = `Passphrase accepted, but the API answered ${r.status}`
-                             + `${r.detail ? ': ' + r.detail : '.'}`
+  let r
+  try {
+    // Validated before it is stored. Storing first meant a value that makes fetch throw -- a
+    // newline, or a non-ASCII character from an IME or an editor paste -- was kept and retried on
+    // every reload, so the page sat on "Checking..." forever and only closing the tab cleared it.
+    r = await loadCreator(v)
+  } catch (e) {
+    $('lockMsg').className = 'msg bad'
+    $('lockMsg').textContent = 'Could not reach the API: ' + e.message
+    return
   }
+  if (r.ok) {
+    sessionStorage.setItem(PASS_KEY, v)
+    $('pass').value = ''
+    $('lockMsg').textContent = ''
+    unlocked()
+    return
+  }
+  $('lockMsg').className = 'msg bad'
+  $('lockMsg').textContent = r.status === 401
+    ? 'Refused. Check the passphrase and try again.'
+    : `Passphrase accepted, but the API answered ${r.status}${r.detail ? ': ' + r.detail : '.'}`
 })
 
 $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('unlock').click() })
@@ -488,15 +506,16 @@ $('pass').addEventListener('keydown', e => { if (e.key === 'Enter') $('unlock').
 async function boot() {
   // The local server is reachable from this machine only, so it needs no passphrase and showing an
   // empty gate there would be theatre.
-  if (LOCAL) { $('app').classList.remove('hidden'); await loadCreator(); return }
+  if (LOCAL) { $('app').classList.remove('hidden'); try { await loadCreator() } catch {} return }
   $('lock').classList.remove('hidden')
-  if (!pass()) return
+  const stored = pass()
+  if (!stored) return
   // Reuse a passphrase already accepted in this tab so a reload mid-recording does not force a
-  // retype -- but a stale one falls back to the gate instead of leaving a blank page.
-  const r = await loadCreator()
+  // retype. Anything that throws, and any 401, drops it -- otherwise a bad stored value re-wedges
+  // this path on every reload and the gate looks broken rather than locked.
+  let r
+  try { r = await loadCreator(stored) } catch { sessionStorage.removeItem(PASS_KEY); return }
   if (r.ok) { unlocked(); return }
-  // Only a rejected passphrase is discarded. Dropping it on a downstream error would turn one
-  // TikTok hiccup into a retype, mid-recording.
   if (r.status === 401) sessionStorage.removeItem(PASS_KEY)
 }
 
