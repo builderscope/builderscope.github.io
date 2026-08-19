@@ -119,13 +119,17 @@ async function run(pw, retyped) {
     say('Could not reach the API.', true, e.message)
     return
   }
-  // 401 is the only status that means the passphrase is wrong. Anything else is TikTok's answer or
-  // ours, and telling the operator to retype a passphrase that is already right sends them to fix
-  // the one thing that is not broken. The gate answers 401 before it ever looks the state up, so a
-  // wrong passphrase does not spend the one-shot consent code.
-  if (r.status === 401) {
+  // 401 AND 429 both mean the gate refused: the rate limiter is only ever consulted after a wrong
+  // passphrase, so a 429 is a wrong passphrase that also ran out of attempts. Reading 429 as
+  // anything else would cache the wrong value and then blame TikTok for refusing a post it was
+  // never asked to make -- on the page that gets screen-recorded for app review.
+  // Either way the gate answered before it looked the state up, so the one-shot consent code is
+  // still unspent and retrying is real.
+  if (r.status === 401 || r.status === 429) {
     sessionStorage.removeItem(PASS_KEY)
-    say('Enter the operator passphrase to finish.', true, retyped ? 'That one was refused.' : '')
+    say('Enter the operator passphrase to finish.', true,
+        r.status === 429 ? 'Too many wrong attempts. Wait a minute, then try again.'
+                         : (retyped ? 'That one was refused.' : ''))
     $('lock').classList.remove('hidden')
     $('pass').value = ''
     $('pass').focus()
