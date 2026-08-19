@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- The page is English by design; without this Chrome offers to translate it and the popup lands in review recordings. -->
+<meta name="google" content="notranslate">
+<!-- Same title as the publisher on purpose: the review recording captures one window, and a window
+     whose title changes mid-flow is a different capture handle. -->
+<title>Builder Scope Publisher</title>
+<style>
+  :root { --ink:#161823; --muted:#67686f; --line:#e3e3e5; --accent:#fe2c55; --bg:#f8f8f8; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:28px; background:var(--bg); color:var(--ink);
+         font:15px/1.5 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width:560px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 0 20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; }
+  .state { font-weight:600; }
+  .state.bad { color:var(--accent); }
+  .detail { font-size:13px; color:var(--muted); margin-top:6px; word-break:break-word; }
+  .recap { list-style:none; padding:0; margin:16px 0 0; font-size:12.5px; color:var(--muted);
+           border-top:1px solid var(--line); padding-top:12px; }
+  .recap li { display:flex; justify-content:space-between; gap:10px; padding:3px 0; }
+  .recap b { color:var(--ink); font-weight:500; text-align:right; word-break:break-word; }
+  .lock { margin-top:16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .lock label { font-weight:600; }
+  .lock input { padding:9px 10px; border:1px solid var(--line); border-radius:8px;
+                background:#fff; font:inherit; color:inherit; min-width:220px; }
+  .lock button { padding:9px 16px; border:0; border-radius:8px; background:var(--ink);
+                 color:#fff; font:600 15px/1 inherit; cursor:pointer; }
+  .back { display:inline-block; margin-top:18px; color:var(--ink); font-size:13.5px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Builder Scope Publisher</h1>
+  <p class="sub">Connecting your TikTok account.</p>
+
+  <div class="card">
+    <div class="state" id="state">Completing the connection…</div>
+    <div class="detail" id="detail"></div>
+
+    <!-- Only shown when this tab has no accepted passphrase, which happens if the round trip
+         finished in a different tab than it started in. -->
+    <div class="lock hidden" id="lock">
+      <label for="pass">Operator passphrase</label>
+      <input type="password" id="pass" autocomplete="current-password">
+      <button id="unlock">Continue</button>
+    </div>
+
+    <ul class="recap hidden" id="facts"></ul>
+    <a class="back" href="../">← Back to the publisher</a>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id)
+const API_BASE = 'https://bs-publisher.repaid-good2.workers.dev'
+// Same key the publisher uses. sessionStorage is per tab and per origin, and it survives a
+// same-tab trip out to TikTok and back -- which is why the consent flow does not use a popup.
+const PASS_KEY = 'bs-pass'
+
+const q = new URLSearchParams(location.search)
+const code = q.get('code')
+const state = q.get('state')
+const denied = q.get('error')
+const deniedWhy = q.get('error_description')
+// An authorization code is a credential, and this page is on camera. Take it out of the address
+// bar and out of the browser history before anything else happens. Read first, then erase.
+history.replaceState(null, '', location.pathname)
+
+function say(text, bad, detail) {
+  $('state').textContent = text
+  $('state').className = bad ? 'state bad' : 'state'
+  $('detail').textContent = detail || ''
+}
+
+function showFacts(d) {
+  const span = (sec, unit, per) =>
+    (Number.isFinite(sec) ? Math.round(sec / per) + ' ' + unit : 'unknown')
+  const rows = [
+    ['Scopes granted', d.scope || '(none reported)'],
+    ['Access token valid for', span(d.expires_in, 'hours', 3600)],
+    ['Consent valid for', span(d.refresh_expires_in, 'days', 86400)],
+  ]
+  const list = $('facts')
+  list.textContent = ''
+  for (const [k, v] of rows) {
+    const li = document.createElement('li')
+    const key = document.createElement('span')
+    const val = document.createElement('b')
+    key.textContent = k
+    val.textContent = v
+    li.append(key, val)
+    list.append(li)
+  }
+  list.classList.remove('hidden')
+}
+
+async function exchange(pw) {
+  const res = await fetch(API_BASE + '/api/auth/exchange', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-bs-auth': pw },
+    body: JSON.stringify({ code, state }),
+  })
+  const d = await res.json().catch(() => null)
+  return { status: res.status, d: d || {} }
+}
+
+async function run(pw, retyped) {
+  say('Completing the connection…')
+  $('lock').classList.add('hidden')
+  let r
+  try {
+    r = await exchange(pw)
+  } catch (e) {
+    say('Could not reach the API.', true, e.message)
+    return
+  }
+  // 401 is the only status that means the passphrase is wrong. Anything else is TikTok's answer or
+  // ours, and telling the operator to retype a passphrase that is already right sends them to fix
+  // the one thing that is not broken. The gate answers 401 before it ever looks the state up, so a
+  // wrong passphrase does not spend the one-shot consent code.
+  if (r.status === 401) {
+    sessionStorage.removeItem(PASS_KEY)
+    say('Enter the operator passphrase to finish.', true, retyped ? 'That one was refused.' : '')
+    $('lock').classList.remove('hidden')
+    $('pass').value = ''
+    $('pass').focus()
+    return
+  }
+  // Accepted by the gate, whatever TikTok then said. Stored only now: a value kept before it was
+  // checked gets retried on every reload, which is how a locked page starts looking broken.
+  sessionStorage.setItem(PASS_KEY, pw)
+  if (!r.d.ok) {
+    say('TikTok did not complete the connection.', true,
+        (r.d.error || ('HTTP ' + r.status)) + (r.d.detail ? ' — ' + r.d.detail : '') +
+        '. The consent code is single use — start again from the publisher.')
+    return
+  }
+  say('Connected. The publisher can post to this account.',
+      false,
+      r.d.missing_scopes && r.d.missing_scopes.length ? 'Not granted: ' + r.d.missing_scopes.join(', ') : '')
+  showFacts(r.d)
+}
+
+$('unlock').addEventListener('click', () => {
+  const v = $('pass').value
+  if (v) run(v, true)
+})
+
+$('pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('unlock').click() })
+
+if (denied) {
+  say('Consent was not granted.', true, deniedWhy || denied)
+} else if (!code || !state) {
+  say('Nothing to complete.', true, 'Open this page from the Connect button on the publisher.')
+} else {
+  const stored = sessionStorage.getItem(PASS_KEY) || ''
+  if (stored) run(stored)
+  else {
+    say('Enter the operator passphrase to finish.')
+    $('lock').classList.remove('hidden')
+    $('pass').focus()
+  }
+}
+</script>
+</body>
+</html>
