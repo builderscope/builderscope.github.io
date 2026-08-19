@@ -276,9 +276,10 @@ function b64utf8(s) {
 async function loadCreator(pw) {
   const res = await fetch(API_BASE + '/api/creator-info', { headers: authHeaders(pw) })
   const d = await res.json()
-  // The status goes back to the caller: only a 401 means the passphrase was wrong. Reporting a
-  // TikTok failure as "wrong passphrase" would send the operator to fix the one thing that is
-  // already right -- and on camera it would blame the wrong side.
+  // The status goes back to the caller: 401 and 429 are the gate refusing (the rate limiter is
+  // only consulted after a wrong passphrase, so a 429 is one too); everything else came from
+  // TikTok. Reporting a TikTok failure as "wrong passphrase" would send the operator to fix the
+  // one thing that is already right -- and on camera it would blame the wrong side.
   if (!res.ok) {
     $('nick').textContent = 'Could not load creator info'
     $('handle').textContent = d.detail || d.error || ''
@@ -514,9 +515,14 @@ $('unlock').addEventListener('click', async () => {
     $('lockMsg').textContent = 'Could not reach the API: ' + e.message
     return
   }
-  if (r.status === 401) {
+  // 401 and 429 both mean the gate refused. The limiter is only consulted after a wrong
+  // passphrase, so a 429 IS a wrong passphrase -- reading it as "accepted" would store the wrong
+  // value and unlock, and every later call would then fail with nothing pointing at the cause.
+  if (r.status === 401 || r.status === 429) {
     $('lockMsg').className = 'msg bad'
-    $('lockMsg').textContent = 'Refused. Check the passphrase and try again.'
+    $('lockMsg').textContent = r.status === 429
+      ? 'Too many wrong attempts. Wait a minute, then try again.'
+      : 'Refused. Check the passphrase and try again.'
     return
   }
   // Accepted by the gate, whatever creator_info then said. Unlock either way: a token that has
@@ -545,11 +551,13 @@ async function boot() {
   const stored = pass()
   if (!stored) return
   // Reuse a passphrase already accepted in this tab so a reload mid-recording does not force a
-  // retype. Anything that throws, and any 401, drops it -- otherwise a bad stored value re-wedges
-  // this path on every reload and the gate looks broken rather than locked.
+  // retype. Anything that throws, and any refusal by the gate, drops it -- otherwise a bad stored
+  // value re-wedges this path on every reload and the gate looks broken rather than locked.
   let r
   try { r = await loadCreator(stored) } catch { sessionStorage.removeItem(PASS_KEY); return }
-  if (r.status === 401) { sessionStorage.removeItem(PASS_KEY); return }
+  // 429 counts as refused here too, or a stored wrong passphrase survives the reload and re-wedges
+  // this path every time -- which is the exact thing the comment above says this branch prevents.
+  if (r.status === 401 || r.status === 429) { sessionStorage.removeItem(PASS_KEY); return }
   unlocked()
 }
 
