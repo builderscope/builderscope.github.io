@@ -197,9 +197,12 @@
             <div class="hint">Turn on to disclose that this video promotes goods or services in exchange
               for something of value. Your video could promote yourself, a third party, or both.</div>
           </div>
-          <span class="switch">
+          <!-- a <label>, not a <span>: the input is 0x0 and transparent, so the only thing a mouse can
+               reach is the track -- and nothing wires a click on the track to the checkbox. As a span
+               this toggle could only ever be flipped from a script. -->
+          <label class="switch">
             <input type="checkbox" id="commercial"><span class="track"></span>
-          </span>
+          </label>
         </div>
 
         <!-- [5] at least one of the two must be picked once the toggle is on -->
