@@ -48,7 +48,8 @@
       accounts. It collects no personal data from anyone else, tracks nobody, and shares nothing with
       third parties. The only things it stores are the authorization token for the operator's own
       accounts &mdash; held in the operator's own Cloudflare account and on their own computer &mdash;
-      and the operator's own account identifiers and publishing records, kept on their own computer.
+      the operator's own account identifiers and publishing records, kept on their own computer, and,
+      during a sign-in, a random one-time value that expires ten minutes later.
     </p>
   </div>
 
@@ -76,6 +77,12 @@
     <li>
       <strong>Publishing records</strong> &mdash; the identifier and status of a video that was uploaded,
       so the operator can confirm whether a post succeeded.
+    </li>
+    <li>
+      <strong>A short-lived sign-in value</strong> &mdash; while the operator is completing a sign-in, the
+      key-value store holds a random one-time value that proves the returning browser is the one that
+      started it. It is not personal data, it is never sent anywhere, and it expires by itself ten
+      minutes after the sign-in begins.
     </li>
   </ul>
   <p>All of the above relates to the operator's own accounts. None of it describes anyone else.</p>
