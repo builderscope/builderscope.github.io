@@ -94,7 +94,9 @@
     own Cloudflare account &mdash; so that the publishing page can refresh them without ever keeping a
     secret in the browser. Reaching that store requires an operator passphrase. A copy of the same
     credential may also sit in a file on the operator's own computer. Neither copy is published to any
-    code repository or shared service, and neither is shared with anyone.
+    code repository or shared service, and neither is shared with anyone. Publishing records and
+    account identifiers stay on the operator's own computer; the key-value store holds nothing but the
+    token and a short-lived value that exists only while a sign-in is being completed.
   </p>
 
   <h2>5. How data is used</h2>
